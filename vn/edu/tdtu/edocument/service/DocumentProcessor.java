@@ -1,7 +1,5 @@
 package vn.edu.tdtu.edocument.service;
 
-import vn.edu.tdtu.edocument.model.Document;
-
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -9,54 +7,55 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import vn.edu.tdtu.edocument.model.Document;
 
 public class DocumentProcessor {
 
     public void process(Document doc) {
         System.out.println("\n=======================================================");
-        System.out.println("BẮT ĐẦU XỬ LÝ HỒ SƠ ID: " + doc.id);
+        System.out.println("BẮT ĐẦU XỬ LÝ HỒ SƠ ID: " + doc.getId());
 
-        if (doc.id == null || doc.id.isEmpty() ||
-            doc.applicantName == null || doc.applicantName.isEmpty() ||
-            doc.applicantEmail == null || doc.applicantEmail.isEmpty() ||
-            doc.applicantPhone == null || doc.applicantPhone.isEmpty() ||
-            doc.officerName == null || doc.officerName.isEmpty() ||
-            doc.officerEmail == null || doc.officerEmail.isEmpty() ||
-            doc.officerPhone == null || doc.officerPhone.isEmpty() ||
-            doc.documentType == null || doc.documentType.isEmpty() ||
-            doc.filePath == null || doc.filePath.isEmpty() ||
-            doc.fileExtension == null || doc.fileExtension.isEmpty() ||
-            doc.digitalSignature == null || doc.digitalSignature.isEmpty()) {
-            
+        if (doc.getId() == null || doc.getId().isEmpty()
+                || doc.getApplicantName() == null || doc.getApplicantName().isEmpty()
+                || doc.getApplicantEmail() == null || doc.getApplicantEmail().isEmpty()
+                || doc.getApplicantPhone() == null || doc.getApplicantPhone().isEmpty()
+                || doc.getOfficerName() == null || doc.getOfficerName().isEmpty()
+                || doc.getOfficerEmail() == null || doc.getOfficerEmail().isEmpty()
+                || doc.getOfficerPhone() == null || doc.getOfficerPhone().isEmpty()
+                || doc.getDocumentType() == null || doc.getDocumentType().isEmpty()
+                || doc.getFilePath() == null || doc.getFilePath().isEmpty()
+                || doc.getFileExtension() == null || doc.getFileExtension().isEmpty()
+                || doc.getDigitalSignature() == null || doc.getDigitalSignature().isEmpty()) {
+
             System.out.println("[LỖI TIẾP NHẬN] Thiếu trường thông tin bắt buộc. Hủy tạo hồ sơ.");
             return;
         }
 
-        doc.status = "DA_TIEP_NHAN";
+        doc.setStatus("DA_TIEP_NHAN");
         sendNotifications(doc);
 
         System.out.println("[KIỂM DUYỆT] Đang kiểm tra dung lượng và định dạng...");
-        if (doc.fileSizeKB > 5120) {
-            System.out.println("[TỪ CHỐI] Dung lượng file " + doc.fileSizeKB + "KB vượt quá 5MB.");
-            doc.status = "TU_CHOI";
+        if (doc.getFileSizeKB() > 5120) {
+            System.out.println("[TỪ CHỐI] Dung lượng file " + doc.getFileSizeKB() + "KB vượt quá 5MB.");
+            doc.setStatus("TU_CHOI");
             sendNotifications(doc);
             return;
         }
 
-        if (!doc.fileExtension.equalsIgnoreCase("txt")) {
-            System.out.println("[TỪ CHỐI] Định dạng " + doc.fileExtension + " không được hỗ trợ ở v1.0.");
-            doc.status = "TU_CHOI";
+        if (!doc.getFileExtension().equalsIgnoreCase("txt")) {
+            System.out.println("[TỪ CHỐI] Định dạng " + doc.getFileExtension() + " không được hỗ trợ ở v1.0.");
+            doc.setStatus("TU_CHOI");
             sendNotifications(doc);
             return;
         }
 
         System.out.println("[TRÍCH XUẤT] Đang đọc nội dung tệp đính kèm...");
         try {
-            String content = new String(Files.readAllBytes(Paths.get(doc.filePath)));
-            doc.extractedContent = content;
+            String content = new String(Files.readAllBytes(Paths.get(doc.getFilePath())));
+            doc.setExtractedContent(content);
         } catch (IOException e) {
             System.out.println("[LỖI] Không thể đọc nội dung file: " + e.getMessage());
-            doc.status = "TU_CHOI";
+            doc.setStatus("TU_CHOI");
             sendNotifications(doc);
             return;
         }
@@ -65,8 +64,15 @@ public class DocumentProcessor {
         saveToStorage(doc);
 
         System.out.println("[HOÀN TẤT] Hồ sơ hợp lệ và đã được lưu trữ thành công.");
-        doc.status = "DANG_XET_DUYET";
+        doc.setStatus("DANG_XET_DUYET");
         sendNotifications(doc);
+    }
+
+    public void saveDraft(Document doc) {
+        System.out.println("\n=======================================================");
+        System.out.println("[LƯU NHÁP] Đang lưu trữ vật lý hồ sơ nháp ID: " + doc.getId());
+        doc.setStatus("LUU_NHAP");
+        saveToStorage(doc);
     }
 
     private void saveToStorage(Document doc) {
@@ -77,27 +83,43 @@ public class DocumentProcessor {
         }
 
         try {
-            Path sourcePath = Paths.get(doc.filePath);
-            Path targetPath = Paths.get(storageDirPath + File.separator + doc.id + "_" + sourcePath.getFileName().toString());
-            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+            String targetPathString = "";
+            if (doc.getFilePath() != null && !doc.getFilePath().isEmpty()) {
+                Path sourcePath = Paths.get(doc.getFilePath());
+                String fileName = sourcePath.getFileName().toString();
+                // Tránh tình trạng tiền tố ID bị nối dài thêm khi người dùng tiếp tục chỉnh sửa nháp
+                if (!fileName.startsWith(doc.getId() + "_")) {
+                    fileName = doc.getId() + "_" + fileName;
+                }
+                Path targetPath = Paths.get(storageDirPath + File.separator + fileName);
 
-            String json = "{\n" +
-                    "  \"id\": \"" + doc.id + "\",\n" +
-                    "  \"applicantName\": \"" + doc.applicantName + "\",\n" +
-                    "  \"applicantEmail\": \"" + doc.applicantEmail + "\",\n" +
-                    "  \"applicantPhone\": \"" + doc.applicantPhone + "\",\n" +
-                    "  \"officerName\": \"" + doc.officerName + "\",\n" +
-                    "  \"officerEmail\": \"" + doc.officerEmail + "\",\n" +
-                    "  \"officerPhone\": \"" + doc.officerPhone + "\",\n" +
-                    "  \"documentType\": \"" + doc.documentType + "\",\n" +
-                    "  \"filePath\": \"" + targetPath.toString().replace("\\", "\\\\") + "\",\n" +
-                    "  \"fileExtension\": \"" + doc.fileExtension + "\",\n" +
-                    "  \"fileSizeKB\": " + doc.fileSizeKB + ",\n" +
-                    "  \"digitalSignature\": \"" + doc.digitalSignature + "\",\n" +
-                    "  \"status\": \"" + doc.status + "\"\n" +
-                    "}";
+                if (Files.exists(sourcePath)) {
+                    if (!sourcePath.toAbsolutePath().normalize().equals(targetPath.toAbsolutePath().normalize())) {
+                        Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    targetPathString = targetPath.toString().replace("\\", "\\\\");
+                } else {
+                    targetPathString = doc.getFilePath().replace("\\", "\\\\");
+                }
+            }
 
-            File dataFile = new File(storageDirPath + File.separator + doc.id + "_data.json");
+            String json = "{\n"
+                    + "  \"id\": \"" + doc.getId() + "\",\n"
+                    + "  \"applicantName\": \"" + doc.getApplicantName() + "\",\n"
+                    + "  \"applicantEmail\": \"" + doc.getApplicantEmail() + "\",\n"
+                    + "  \"applicantPhone\": \"" + doc.getApplicantPhone() + "\",\n"
+                    + "  \"officerName\": \"" + doc.getOfficerName() + "\",\n"
+                    + "  \"officerEmail\": \"" + doc.getOfficerEmail() + "\",\n"
+                    + "  \"officerPhone\": \"" + doc.getOfficerPhone() + "\",\n"
+                    + "  \"documentType\": \"" + doc.getDocumentType() + "\",\n"
+                    + "  \"filePath\": \"" + targetPathString + "\",\n"
+                    + "  \"fileExtension\": \"" + doc.getFileExtension() + "\",\n"
+                    + "  \"fileSizeKB\": " + doc.getFileSizeKB() + ",\n"
+                    + "  \"digitalSignature\": \"" + doc.getDigitalSignature() + "\",\n"
+                    + "  \"status\": \"" + doc.getStatus() + "\"\n"
+                    + "}";
+
+            File dataFile = new File(storageDirPath + File.separator + doc.getId() + "_data.json");
             FileWriter writer = new FileWriter(dataFile);
             writer.write(json);
             writer.close();
@@ -108,9 +130,9 @@ public class DocumentProcessor {
     }
 
     private void sendNotifications(Document doc) {
-        System.out.println("  [GỬI EMAIL] -> Người nộp (" + doc.applicantEmail + "): Hồ sơ chuyển sang trạng thái " + doc.status);
-        System.out.println("  [GỬI SMS]   -> Người nộp (" + doc.applicantPhone + "): Hồ sơ chuyển sang trạng thái " + doc.status);
-        System.out.println("  [GỬI EMAIL] -> Cán bộ xử lý (" + doc.officerEmail + "): Hồ sơ chuyển sang trạng thái " + doc.status);
-        System.out.println("  [GỬI SMS]   -> Cán bộ xử lý (" + doc.officerPhone + "): Hồ sơ chuyển sang trạng thái " + doc.status);
+        System.out.println("  [GỬI EMAIL] -> Người nộp (" + doc.getApplicantEmail() + "): Hồ sơ chuyển sang trạng thái " + doc.getStatus());
+        System.out.println("  [GỬI SMS]   -> Người nộp (" + doc.getApplicantPhone() + "): Hồ sơ chuyển sang trạng thái " + doc.getStatus());
+        System.out.println("  [GỬI EMAIL] -> Cán bộ xử lý (" + doc.getOfficerEmail() + "): Hồ sơ chuyển sang trạng thái " + doc.getStatus());
+        System.out.println("  [GỬI SMS]   -> Cán bộ xử lý (" + doc.getOfficerPhone() + "): Hồ sơ chuyển sang trạng thái " + doc.getStatus());
     }
 }
